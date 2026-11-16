@@ -1,0 +1,6 @@
+{
+  "name": "Velora - AI Campus Reuse Marketplace with Mivra",
+  "description": "An AI-powered campus reuse marketplace for college students to buy, sell, borrow, and lend essentials, outfits, and gear with Mivra AI assistant and circular impact tracking.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

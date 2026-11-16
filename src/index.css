@@ -1,0 +1,74 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --velora-bg: #fbf7f1;
+    --velora-surface: #ffffff;
+    --velora-sand: #f4eae0;
+    --velora-maple-mist: #f9efe6;
+    --velora-border: #e6d7c8;
+    --velora-chestnut: #3d2314;
+    --velora-chestnut-hover: #2c180d;
+    --velora-amber: #b85d19;
+    --velora-maple-rust: #c04a2b;
+    --velora-moss: #5b6e3a;
+    --velora-mulberry: #6d2e46;
+    --velora-ink: #261810;
+    --velora-muted: #6e5a4f;
+  }
+
+  body {
+    background-color: #fbf7f1;
+    color: #261810;
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+.font-display {
+  font-family: 'Fraunces', Georgia, serif;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes slideLeft {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.2s ease-out forwards;
+}
+
+.animate-slide-left {
+  animation: slideLeft 0.26s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Subtle warm autumn scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #decbb8;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #c5ad95;
+}
