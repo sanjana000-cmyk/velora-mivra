@@ -1,9 +1,8 @@
-import express, { Request, Response } from 'express';
+import express, { type Request, type Response } from 'express';
 import http from 'http';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { GoogleGenAI, ThinkingLevel } from '@google/genai';
 
 dotenv.config();
 
@@ -19,21 +18,32 @@ app.get('/api/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok' });
 });
 
-// Server-side initialization of Gemini API
+// Lazy-loaded server-side initialization of Gemini API to keep server boot fast
 const apiKey = process.env.GEMINI_API_KEY || '';
 const isValidKey = Boolean(apiKey && apiKey !== 'MY_GEMINI_API_KEY' && apiKey.length > 10);
-const ai = isValidKey
-  ? new GoogleGenAI({
+const GEMINI_MODEL = 'gemini-4-hydrogen';
+
+let genaiModulePromise: Promise<typeof import('@google/genai')> | null = null;
+let cachedAiClient: any = null;
+
+async function getGenAiClient(): Promise<{ ai: any; ThinkingLevel: any } | null> {
+  if (!isValidKey) return null;
+  if (!genaiModulePromise) {
+    genaiModulePromise = import('@google/genai');
+  }
+  const mod = await genaiModulePromise;
+  if (!cachedAiClient) {
+    cachedAiClient = new mod.GoogleGenAI({
       apiKey,
       httpOptions: {
         headers: {
           'User-Agent': 'aistudio-build',
         },
       },
-    })
-  : null;
-
-const GEMINI_MODEL = 'gemini-4-hydrogen';
+    });
+  }
+  return { ai: cachedAiClient, ThinkingLevel: mod.ThinkingLevel };
+}
 
 // Short-lived in-memory cache + rate-limit circuit breaker to prevent redundant API calls
 const CACHE_TTL_MS = 2 * 60 * 1000;
@@ -309,7 +319,8 @@ app.post('/api/mivra/chat', async (req: Request, res: Response) => {
         }))
       : [];
 
-    if (!ai || Date.now() < quotaCooldownUntil) {
+    const client = Date.now() < quotaCooldownUntil ? null : await getGenAiClient();
+    if (!client) {
       const local = localNaturalSearch(message, activeItems);
       res.json({
         reply: `Hi! I'm Mivra, your Velora campus reuse assistant. ${local.interpretation} ${local.borrowOrBuyTip}\n\nCheck out the matched campus listings below, or post on the Wanted Board if you need a specific peer to lend an item.`,
@@ -345,13 +356,13 @@ Only include valid item IDs from the provided catalog that match well. If none m
       },
     ];
 
-    const response = await withTimeout(
-      ai.models.generateContent({
+    const response: any = await withTimeout(
+      client.ai.models.generateContent({
         model: GEMINI_MODEL,
         contents: contents as any,
         config: {
           systemInstruction,
-          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+          thinkingConfig: { thinkingLevel: client.ThinkingLevel.LOW },
         },
       })
     );
@@ -414,7 +425,8 @@ app.post('/api/mivra/generate-listing', async (req: Request, res: Response) => {
       },
     };
 
-    if (!ai || Date.now() < quotaCooldownUntil) {
+    const client = Date.now() < quotaCooldownUntil ? null : await getGenAiClient();
+    if (!client) {
       res.json(fallbackListing);
       return;
     }
@@ -436,13 +448,13 @@ Generate a JSON object with:
 
 Return ONLY valid JSON.`;
 
-    const response = await withTimeout(
-      ai.models.generateContent({
+    const response: any = await withTimeout(
+      client.ai.models.generateContent({
         model: GEMINI_MODEL,
         contents: prompt,
         config: {
           responseMimeType: 'application/json',
-          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+          thinkingConfig: { thinkingLevel: client.ThinkingLevel.LOW },
         },
       })
     );
@@ -509,7 +521,8 @@ app.post('/api/mivra/smart-match', async (req: Request, res: Response) => {
       };
     };
 
-    if (!ai || Date.now() < quotaCooldownUntil) {
+    const client = Date.now() < quotaCooldownUntil ? null : await getGenAiClient();
+    if (!client) {
       res.json(buildFallback());
       return;
     }
@@ -552,13 +565,13 @@ Return a JSON object with:
 Return up to 4 top matches ordered by matchScore descending. If none match well, return an empty array for matches and explain in summary.
 Return ONLY valid JSON.`;
 
-    const response = await withTimeout(
-      ai.models.generateContent({
+    const response: any = await withTimeout(
+      client.ai.models.generateContent({
         model: GEMINI_MODEL,
         contents: prompt,
         config: {
           responseMimeType: 'application/json',
-          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+          thinkingConfig: { thinkingLevel: client.ThinkingLevel.LOW },
         },
       })
     );
@@ -609,7 +622,8 @@ app.post('/api/mivra/natural-search', async (req: Request, res: Response) => {
       return;
     }
 
-    if (!ai || Date.now() < quotaCooldownUntil) {
+    const client = Date.now() < quotaCooldownUntil ? null : await getGenAiClient();
+    if (!client) {
       res.json(localNaturalSearch(query, availableItems));
       return;
     }
@@ -641,13 +655,13 @@ Return a JSON object:
 }
 Return ONLY valid JSON.`;
 
-    const response = await withTimeout(
-      ai.models.generateContent({
+    const response: any = await withTimeout(
+      client.ai.models.generateContent({
         model: GEMINI_MODEL,
         contents: prompt,
         config: {
           responseMimeType: 'application/json',
-          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+          thinkingConfig: { thinkingLevel: client.ThinkingLevel.LOW },
         },
       })
     );
@@ -734,7 +748,8 @@ app.post('/api/mivra/borrow-or-buy-advisor', async (req: Request, res: Response)
       };
     };
 
-    if (!ai || Date.now() < quotaCooldownUntil) {
+    const client = Date.now() < quotaCooldownUntil ? null : await getGenAiClient();
+    if (!client) {
       res.json(buildLocalAdvice());
       return;
     }
@@ -769,13 +784,13 @@ Return a JSON object:
 }
 Return ONLY valid JSON.`;
 
-    const response = await withTimeout(
-      ai.models.generateContent({
+    const response: any = await withTimeout(
+      client.ai.models.generateContent({
         model: GEMINI_MODEL,
         contents: prompt,
         config: {
           responseMimeType: 'application/json',
-          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+          thinkingConfig: { thinkingLevel: client.ThinkingLevel.LOW },
         },
       })
     );
@@ -836,7 +851,8 @@ app.post('/api/mivra/draft-wanted-post', async (req: Request, res: Response) => 
       occasion: conversationalText.toLowerCase().includes('fest') ? 'College Fests' : 'Everyday',
     });
 
-    if (!ai || Date.now() < quotaCooldownUntil) {
+    const client = Date.now() < quotaCooldownUntil ? null : await getGenAiClient();
+    if (!client) {
       res.json(buildLocalDraft());
       return;
     }
@@ -857,13 +873,13 @@ Generate a JSON object:
 }
 Return ONLY valid JSON.`;
 
-    const response = await withTimeout(
-      ai.models.generateContent({
+    const response: any = await withTimeout(
+      client.ai.models.generateContent({
         model: GEMINI_MODEL,
         contents: prompt,
         config: {
           responseMimeType: 'application/json',
-          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+          thinkingConfig: { thinkingLevel: client.ThinkingLevel.LOW },
         },
       })
     );
@@ -914,7 +930,8 @@ app.post('/api/mivra/sustainability-advisor', async (req: Request, res: Response
         'Estimated to save ~18kg of carbon emissions and keep ~1.5kg of plastics out of landfills.',
     };
 
-    if (!ai || Date.now() < quotaCooldownUntil) {
+    const client = Date.now() < quotaCooldownUntil ? null : await getGenAiClient();
+    if (!client) {
       res.json(fallbackEco);
       return;
     }
@@ -935,13 +952,13 @@ Generate a JSON object:
 }
 Return ONLY valid JSON.`;
 
-    const response = await withTimeout(
-      ai.models.generateContent({
+    const response: any = await withTimeout(
+      client.ai.models.generateContent({
         model: GEMINI_MODEL,
         contents: prompt,
         config: {
           responseMimeType: 'application/json',
-          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+          thinkingConfig: { thinkingLevel: client.ThinkingLevel.LOW },
         },
       })
     );
@@ -970,18 +987,16 @@ Return ONLY valid JSON.`;
 async function startServer() {
   const httpServer = http.createServer(app);
 
-  if (!isProd) {
-    const vitePromise = (async () => {
-      const { createServer } = await import('vite');
-      return createServer({
-        server: {
-          middlewareMode: true,
-          hmr: process.env.DISABLE_HMR === 'true' ? false : { server: httpServer },
-        },
-        appType: 'spa',
-      });
-    })();
+  let resolveViteReady!: (vite: any) => void;
+  let rejectViteReady!: (err: any) => void;
+  const vitePromise = !isProd
+    ? new Promise<any>((resolve, reject) => {
+        resolveViteReady = resolve;
+        rejectViteReady = reject;
+      })
+    : null;
 
+  if (!isProd && vitePromise) {
     // Prevent unhandled rejection warning if Vite fails during startup
     vitePromise.catch((err) => {
       console.error('Failed to initialize Vite middleware:', err);
@@ -1004,6 +1019,24 @@ async function startServer() {
 
   httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`Velora server running on http://0.0.0.0:${PORT}`);
+
+    if (!isProd) {
+      setImmediate(async () => {
+        try {
+          const { createServer } = await import('vite');
+          const vite = await createServer({
+            server: {
+              middlewareMode: true,
+              ws: process.env.DISABLE_HMR === 'true' ? false : { server: httpServer },
+            },
+            appType: 'spa',
+          });
+          resolveViteReady(vite);
+        } catch (err) {
+          rejectViteReady(err);
+        }
+      });
+    }
   });
 }
 
